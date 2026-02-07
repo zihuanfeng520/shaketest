@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>搖晃播放音效</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden; /* 防止搖晃時出現捲軸 */
+        }
+        #status {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #333;
+            font-weight: bold;
+        }
+        #info {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            background-color: #28a745; /* 改成綠色按鈕 */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        button:active {
+            background-color: #1e7e34;
+            transform: translateY(2px);
+        }
+        .shaking {
+            background-color: #ffeb3b !important; /* 晃動時變黃色 */
+            transition: background-color 0.1s;
+        }
+    </style>
+</head>
+<body id="body">
+
+    <div id="status">準備就緒</div>
+    <div id="info">
+        1. 請確保目錄下有 "shake.mp3"<br>
+        2. 點擊下方按鈕解除靜音限制
+    </div>
+    
+    <button id="permissionBtn" onclick="initAudioAndPermission()">啟用並解鎖音效</button>
+
+    <audio id="myAudio" src="shake.mp3" preload="auto"></audio>
+
+    <script>
+        // --- 設定區 ---
+        const SHAKE_THRESHOLD = 800; // 晃動靈敏度
+        const RECOVER_TIME = 1000;   // 每次播放的最短間隔(毫秒)，避免聲音重疊太嚴重
+        // -------------
+
+        let lastUpdate = 0;
+        let x = 0, y = 0, z = 0;
+        let lastX = 0, lastY = 0, lastZ = 0;
+        let lastPlayTime = 0; // 紀錄上次播放時間
+
+        const statusDiv = document.getElementById('status');
+        const infoDiv = document.getElementById('info');
+        const body = document.getElementById('body');
+        const btn = document.getElementById('permissionBtn');
+        const audio = document.getElementById('myAudio');
+
+        // 這個函式做兩件事：1. 請求傳感器權限 2. 解鎖音效播放權限
+        function initAudioAndPermission() {
+            
+            // 步驟 A: 嘗試播放並立刻暫停，這是為了騙過瀏覽器，讓它知道使用者同意播放聲音
+            audio.play().then(() => {
+                audio.pause();
+                audio.currentTime = 0;
+            }).catch(error => {
+                console.log("音效預載失敗(可能是還沒傳到 GitHub):", error);
+                statusDiv.innerText = "音效檔讀取失敗，請檢查檔名";
+            });
+
+            // 步驟 B: 處理傳感器權限 (同之前的邏輯)
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission()
+                    .then(response => {
+                        if (response === 'granted') {
+                            startListening();
+                        } else {
+                            statusDiv.textContent = "權限被拒絕";
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                startListening();
+            }
+        }
+
+        function startListening() {
+            window.addEventListener('devicemotion', handleMotion, false);
+            statusDiv.textContent = "🔊 監聽中！請用力搖晃手機";
+            infoDiv.textContent = "音效系統已待命";
+            btn.style.display = 'none';
+        }
+
+        function handleMotion(event) {
+            let acceleration = event.accelerationIncludingGravity;
+            if (!acceleration) acceleration = event.acceleration;
+            if (!acceleration) return;
+
+            const curTime = new Date().getTime();
+
+            if ((curTime - lastUpdate) > 100) {
+                const diffTime = curTime - lastUpdate;
+                lastUpdate = curTime;
+
+                x = acceleration.x;
+                y = acceleration.y;
+                z = acceleration.z;
+
+                const speed = Math.abs(x + y + z - lastX - lastY - lastZ) / diffTime * 10000;
+
+                if (speed > SHAKE_THRESHOLD) {
+                    // 檢查是否超過冷卻時間，避免連續觸發太吵
+                    if (curTime - lastPlayTime > RECOVER_TIME) {
+                        playSound();
+                        lastPlayTime = curTime;
+                    }
+                }
+
+                lastX = x;
+                lastY = y;
+                lastZ = z;
+            }
+        }
+
+        function playSound() {
+            statusDiv.textContent = "播放音效中...🎶";
+            
+            // 視覺回饋
+            body.classList.add('shaking');
+            setTimeout(() => {
+                body.classList.remove('shaking');
+                statusDiv.textContent = "🔊 監聽中！請用力搖晃手機";
+            }, 500);
+
+            // 播放邏輯：先歸零再播放，確保每次都從頭聽
+            audio.currentTime = 0;
+            audio.play().catch(e => console.log("播放被阻擋:", e));
+
+            if (navigator.vibrate) {
+                navigator.vibrate(200);
+            }
+        }
+    </script>
+</body>
+</html>
