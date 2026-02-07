@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>聲音觸發器</title>
     <style>
-        /* --- 樣式設定 (維持不變) --- */
+        /* --- 樣式設定 --- */
         body {
             margin: 0;
             padding: 0;
@@ -41,36 +41,85 @@
         .control-group {
             margin-bottom: 20px;
             width: 80%;
-            max-width: 300px;
+            max-width: 320px; /* 稍微加寬 */
             text-align: left;
         }
 
         label {
             display: block;
-            margin-bottom: 5px;
-            font-size: 14px;
-            color: #ccc;
+            margin-bottom: 8px;
+            font-size: 15px;
+            color: #eee;
         }
 
-        select, input[type="range"] {
+        select {
             width: 100%;
-            padding: 10px;
-            border-radius: 5px;
-            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #444;
             font-size: 16px;
             background: #333;
             color: white;
+            outline: none;
+        }
+
+        /* --- 優化滑桿樣式 (解決右邊白白的問題) --- */
+        input[type="range"] {
+            -webkit-appearance: none; /* 清除預設樣式 */
+            width: 100%; /* 確保填滿 */
+            height: 8px;
+            background: #444;
+            border-radius: 5px;
+            outline: none;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+
+        /* 滑桿拖曳球 (Chrome/Safari) */
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #0984e3; /* 藍色球 */
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+            margin-top: -8px; /* 校正位置 */
+            position: relative;
+            z-index: 2;
+        }
+        
+        /* 滑桿軌道 (Chrome/Safari) - 雖然 accent-color 比較新，但這樣寫相容性最好 */
+        input[type="range"]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #444;
+            border-radius: 5px;
+        }
+
+        /* Firefox 支援 */
+        input[type="range"]::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            border: none;
+            border-radius: 50%;
+            background: #0984e3;
+            cursor: pointer;
         }
 
         #modeSelect {
             background-color: #0984e3;
             font-weight: bold;
+            border: none;
         }
 
         button.start-btn {
-            margin-top: 10px;
+            margin-top: 20px;
             margin-bottom: 50px;
-            padding: 15px 50px;
+            padding: 15px 60px;
             font-size: 20px;
             background-color: #d63031;
             color: white;
@@ -78,7 +127,8 @@
             border-radius: 50px;
             cursor: pointer;
             box-shadow: 0 4px 15px rgba(214, 48, 49, 0.4);
-            transition: all 0.2s;
+            transition: transform 0.1s, background-color 0.2s;
+            font-weight: bold;
         }
         
         button.start-btn:active { transform: scale(0.95); }
@@ -87,7 +137,7 @@
         #loading-msg {
             color: #f1c40f;
             font-size: 14px;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             white-space: pre-wrap;
             text-align: center;
         }
@@ -107,10 +157,12 @@
 
         #hint-text {
             position: absolute;
-            bottom: 20px;
-            color: #555;
-            font-size: 12px;
+            bottom: 30px;
+            color: #444;
+            font-size: 14px;
             pointer-events: none;
+            font-weight: bold;
+            letter-spacing: 1px;
         }
 
         #effect-image {
@@ -118,7 +170,7 @@
             max-height: 95%;
             object-fit: contain;
             opacity: 0;
-            transform: scale(0.5);
+            transform: scale(0.8);
             transition: opacity 0.1s, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
@@ -129,9 +181,10 @@
         
         .warning-text {
             color: #ff7675;
-            font-size: 12px;
-            margin-top: 5px;
+            font-size: 13px;
+            margin-top: 8px;
             display: none;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -167,12 +220,13 @@
 
         <div class="control-group">
             <label>音量: <span id="volValue">100%</span></label>
-            <input type="range" id="volRange" min="0" max="1" step="0.1" value="1" oninput="updateLabels()">
+            <input type="range" id="volRange" min="0" max="1" step="0.01" value="1" oninput="updateLabels()">
         </div>
 
         <div class="control-group">
             <label>觸發門檻值: <span id="senseValue">150</span></label>
-            <input type="range" id="senseRange" min="50" max="500" step="10" value="150" oninput="updateLabels()">
+            <input type="range" id="senseRange" min="10" max="4000" step="10" value="150" oninput="updateLabels()">
+            <small style="color:#888; display:block; margin-top:5px; font-size:12px;">(數值越小越敏感，越大越難觸發)</small>
         </div>
 
         <button class="start-btn" id="startBtn" onclick="enterStandby()" disabled>開始</button>
@@ -273,8 +327,7 @@
             changeMode(); 
             updateLabels();
 
-            // ★★★ 關鍵修改：綁定音效結束事件 ★★★
-            // 當音效播完時，才執行重置動作
+            // 音效播完 -> 重置
             audioEl.onended = function() {
                 resetEffect();
             };
@@ -284,13 +337,15 @@
         function changeMode() {
             const mode = modeSelect.value;
             if (mode === 'slap') {
-                senseRange.min = "50";
+                // 拍桌模式：範圍 10 ~ 500 (微調很細)
+                senseRange.min = "10";
                 senseRange.max = "500";
                 senseRange.value = "150";
                 throwWarning.style.display = 'none';
             } else {
+                // 丟擲模式：範圍 500 ~ 4000 (需要很大力)
                 senseRange.min = "500";
-                senseRange.max = "3000";
+                senseRange.max = "4000"; // 拉高上限到 4000
                 senseRange.value = "1200";
                 throwWarning.style.display = 'block';
             }
@@ -298,6 +353,7 @@
         }
 
         function updateLabels() {
+            // 音量顯示改成整數 (捨去小數點)
             document.getElementById('volValue').innerText = Math.round(document.getElementById('volRange').value * 100) + "%";
             document.getElementById('senseValue').innerText = document.getElementById('senseRange').value;
         }
@@ -334,7 +390,6 @@
         function exitStandby() {
             settingsPanel.classList.remove('hidden');
             isStandby = false;
-            // 強制停止播放
             audioEl.pause();
             audioEl.currentTime = 0;
             resetEffect();
@@ -364,7 +419,6 @@
         }
 
         function handleMotion(event) {
-            // 如果正在播放 (isPlaying = true)，這裡會直接 return，完全不會偵測
             if (!isStandby || isPlaying) return;
 
             let acceleration = event.accelerationIncludingGravity || event.acceleration;
@@ -402,36 +456,27 @@
 
         function triggerEffect() {
             if (isPlaying) return;
-            isPlaying = true; // ★ 鎖定偵測
+            isPlaying = true; // 鎖定
 
             // 重置音頻並播放
             audioEl.currentTime = 0;
             audioEl.play()
                 .then(() => {
-                    // 播放成功，顯示圖片
                     layer.classList.add('active');
                 })
                 .catch(e => {
                     console.log("播放失敗", e);
-                    // 如果播放失敗，立刻重置，避免卡住
                     resetEffect();
                 });
 
             if (navigator.vibrate) navigator.vibrate(200);
-
-            // ★ 注意：這裡不再有 setTimeout 了！
-            // 結束的動作全部交給 audioEl.onended 處理
         }
 
-        // 統一處理效果結束的函式
         function resetEffect() {
-            layer.classList.remove('active'); // 隱藏圖片
-            isPlaying = false; // ★ 解鎖偵測
-            lastX = null; // 重置座標，防止殘餘震動誤觸
+            layer.classList.remove('active');
+            isPlaying = false;
+            lastX = null;
         }
     </script>
 </body>
 </html>
-
-
-
