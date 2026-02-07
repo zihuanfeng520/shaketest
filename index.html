@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>甩炮</title>
+    <title>聲音觸發器</title>
     <style>
         /* --- 樣式設定 (維持不變) --- */
         body {
@@ -138,7 +138,7 @@
 <body>
 
     <div id="settings-panel">
-        <h2 style="margin-bottom: 10px;">震動偵測 (完美同步版)</h2>
+        <h2 style="margin-bottom: 10px;">聲音觸發器</h2>
         
         <div id="loading-msg">正在掃描 GitHub 資料夾...</div>
 
@@ -175,7 +175,7 @@
             <input type="range" id="senseRange" min="50" max="500" step="10" value="150" oninput="updateLabels()">
         </div>
 
-        <button class="start-btn" id="startBtn" onclick="enterStandby()" disabled>🔴 進入待機</button>
+        <button class="start-btn" id="startBtn" onclick="enterStandby()" disabled>開始</button>
     </div>
 
     <div id="standby-layer" ondblclick="exitStandby()">
@@ -321,7 +321,7 @@
             audioEl.play().then(() => {
                 audioEl.pause();
                 audioEl.currentTime = 0;
-            }).catch(e => console.log("音效解鎖失敗", e));
+            }).catch(e => console.log("音效讀取失敗", e));
 
             toggleFullScreen(true);
             requestSensorPermission();
@@ -432,4 +432,5 @@
     </script>
 </body>
 </html>
+
 
