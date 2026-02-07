@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>自動抓檔震動偵測</title>
+    <title>雙模式震動偵測</title>
     <style>
-        /* --- 樣式設定 (維持不變) --- */
+        /* --- 樣式設定 --- */
         body {
             margin: 0;
             padding: 0;
@@ -31,7 +31,7 @@
             background-color: #1a1a1a;
             color: white;
             transition: transform 0.3s ease;
-            overflow-y: auto; /* 避免手機螢幕太小選項被切掉 */
+            overflow-y: auto;
         }
 
         #settings-panel.hidden {
@@ -62,8 +62,14 @@
             color: white;
         }
 
+        /* 模式切換特別樣式 */
+        #modeSelect {
+            background-color: #0984e3;
+            font-weight: bold;
+        }
+
         button.start-btn {
-            margin-top: 20px;
+            margin-top: 10px;
             margin-bottom: 50px;
             padding: 15px 50px;
             font-size: 20px;
@@ -73,15 +79,19 @@
             border-radius: 50px;
             cursor: pointer;
             box-shadow: 0 4px 15px rgba(214, 48, 49, 0.4);
+            transition: all 0.2s;
         }
         
+        button.start-btn:active {
+            transform: scale(0.95);
+        }
+
         button.start-btn:disabled {
             background-color: #555;
             cursor: not-allowed;
             box-shadow: none;
         }
 
-        /* 讀取中的提示 */
         #loading-msg {
             color: #f1c40f;
             font-size: 14px;
@@ -90,7 +100,7 @@
             text-align: center;
         }
 
-        /* 待機層 */
+        /* 待機層與效果 */
         #standby-layer {
             position: fixed;
             top: 0;
@@ -125,24 +135,41 @@
             opacity: 1;
             transform: scale(1);
         }
+        
+        /* 丟擲模式的警告 */
+        .warning-text {
+            color: #ff7675;
+            font-size: 12px;
+            margin-top: 5px;
+            display: none;
+        }
     </style>
 </head>
 <body>
 
     <div id="settings-panel">
-        <h2 style="margin-bottom: 10px;">自動抓檔震動偵測</h2>
+        <h2 style="margin-bottom: 10px;">雙模式震動偵測</h2>
         
-        <div id="loading-msg">正在掃描 GitHub 檔案...</div>
+        <div id="loading-msg">正在掃描 GitHub 資料夾...</div>
 
         <div class="control-group">
-            <label>選擇台詞 (MP3):</label>
+            <label>選擇觸發模式:</label>
+            <select id="modeSelect" onchange="changeMode()">
+                <option value="slap">✋ 拍桌模式 (高靈敏)</option>
+                <option value="throw">⚾ 丟擲模式 (需用力揮)</option>
+            </select>
+            <div id="throwWarning" class="warning-text">⚠️ 警告：請抓緊手機！請勿真的鬆手丟出！</div>
+        </div>
+
+        <div class="control-group">
+            <label>選擇台詞 (sound/):</label>
             <select id="audioSelect">
                 <option value="" disabled selected>讀取中...</option>
             </select>
         </div>
 
         <div class="control-group">
-            <label>選擇圖片 (PNG/JPG):</label>
+            <label>選擇圖片 (picture/):</label>
             <select id="imageSelect">
                 <option value="" disabled selected>讀取中...</option>
             </select>
@@ -154,8 +181,9 @@
         </div>
 
         <div class="control-group">
-            <label>靈敏度 (小=敏): <span id="senseValue">150</span></label>
+            <label>觸發門檻值: <span id="senseValue">150</span></label>
             <input type="range" id="senseRange" min="50" max="500" step="10" value="150" oninput="updateLabels()">
+            <small style="color:#888; display:block; margin-top:5px;">數值越小越容易觸發</small>
         </div>
 
         <button class="start-btn" id="startBtn" onclick="enterStandby()" disabled>🔴 進入待機</button>
@@ -170,7 +198,7 @@
 
     <script>
         // ==========================================
-        // ★★★ 這裡已經幫你設定好了 ★★★
+        // ★★★ 設定區 ★★★
         const GITHUB_USERNAME = 'zihuanfeng520'; 
         const REPO_NAME = 'shaketest';
         // ==========================================
@@ -190,74 +218,89 @@
         const imageSelect = document.getElementById('imageSelect');
         const loadingMsg = document.getElementById('loading-msg');
         const startBtn = document.getElementById('startBtn');
+        const modeSelect = document.getElementById('modeSelect');
+        const senseRange = document.getElementById('senseRange');
+        const throwWarning = document.getElementById('throwWarning');
 
-        // --- 自動讀取 GitHub 檔案 ---
+        // --- 初始化: 讀取 GitHub 檔案 ---
         window.onload = function() {
-            // 建構 GitHub API 網址
-            const apiUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/`;
+            const soundApi = `https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/sound`;
+            const pictureApi = `https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/picture`;
 
-            fetch(apiUrl)
-                .then(response => {
-                    if (!response.ok) throw new Error(`找不到倉庫 (代碼 ${response.status})`);
-                    return response.json();
-                })
-                .then(data => {
-                    // 清空選單
-                    audioSelect.innerHTML = '';
-                    imageSelect.innerHTML = '';
+            loadingMsg.innerText = "正在連線 GitHub API...";
 
-                    let hasAudio = false;
-                    let hasImage = false;
+            Promise.all([
+                fetch(soundApi).then(res => { if(!res.ok) throw new Error("找不到 sound 資料夾"); return res.json(); }),
+                fetch(pictureApi).then(res => { if(!res.ok) throw new Error("找不到 picture 資料夾"); return res.json(); })
+            ])
+            .then(([soundData, pictureData]) => {
+                // 音效
+                audioSelect.innerHTML = '';
+                let hasAudio = false;
+                if (Array.isArray(soundData)) {
+                    soundData.forEach(file => {
+                        if (file.name.toLowerCase().endsWith('.mp3')) {
+                            const option = document.createElement('option');
+                            option.value = `sound/${file.name}`; 
+                            option.text = file.name;
+                            audioSelect.appendChild(option);
+                            hasAudio = true;
+                        }
+                    });
+                }
 
-                    // 遍歷所有檔案
-                    if (Array.isArray(data)) {
-                        data.forEach(file => {
-                            const name = file.name.toLowerCase();
-                            
-                            // 判斷是否為 MP3
-                            if (name.endsWith('.mp3')) {
-                                const option = document.createElement('option');
-                                option.value = file.name;
-                                option.text = file.name;
-                                audioSelect.appendChild(option);
-                                hasAudio = true;
-                            }
+                // 圖片
+                imageSelect.innerHTML = '';
+                let hasImage = false;
+                if (Array.isArray(pictureData)) {
+                    pictureData.forEach(file => {
+                        const name = file.name.toLowerCase();
+                        if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.gif')) {
+                            const option = document.createElement('option');
+                            option.value = `picture/${file.name}`; 
+                            option.text = file.name;
+                            imageSelect.appendChild(option);
+                            hasImage = true;
+                        }
+                    });
+                }
 
-                            // 判斷是否為圖片
-                            if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.gif')) {
-                                const option = document.createElement('option');
-                                option.value = file.name;
-                                option.text = file.name;
-                                imageSelect.appendChild(option);
-                                hasImage = true;
-                            }
-                        });
-                    }
-
-                    // 檢查是否有檔案
-                    if (!hasAudio) audioSelect.innerHTML = '<option disabled>無 MP3 檔案</option>';
-                    if (!hasImage) imageSelect.innerHTML = '<option disabled>無圖片檔案</option>';
-
-                    if (hasAudio && hasImage) {
-                        loadingMsg.innerText = "✅ 掃描完成！請選擇設定";
-                        loadingMsg.style.color = "#2ecc71";
-                        startBtn.disabled = false;
-                        
-                        // 預設選取第一個選項
-                        audioSelect.selectedIndex = 0;
-                        imageSelect.selectedIndex = 0;
-                    } else {
-                        loadingMsg.innerText = "⚠️ 找不到 .mp3 或圖片檔案\n請確認檔案已上傳且檔名為小寫";
-                    }
-                })
-                .catch(error => {
-                    console.error(error);
-                    loadingMsg.innerText = "❌ 讀取失敗: " + error.message;
-                    if(location.protocol === 'file:') {
-                        loadingMsg.innerText += "\n(請上傳到 GitHub 後再測試)";
-                    }
-                });
+                if (hasAudio && hasImage) {
+                    loadingMsg.innerText = "✅ 讀取成功！";
+                    loadingMsg.style.color = "#2ecc71";
+                    startBtn.disabled = false;
+                    audioSelect.selectedIndex = 0;
+                    imageSelect.selectedIndex = 0;
+                } else {
+                    loadingMsg.innerText = "⚠️ 讀取不完整，請檢查 sound/picture 資料夾";
+                }
+            })
+            .catch(error => {
+                console.error(error);
+                loadingMsg.innerText = "❌ 讀取失敗: " + error.message;
+            });
             
+            changeMode(); // 初始化模式數值
+            updateLabels();
+        }
+
+        // --- 切換模式邏輯 ---
+        function changeMode() {
+            const mode = modeSelect.value;
+            
+            if (mode === 'slap') {
+                // 拍桌模式：靈敏度高 (數值小)
+                senseRange.min = "50";
+                senseRange.max = "500";
+                senseRange.value = "150"; // 預設值
+                throwWarning.style.display = 'none';
+            } else {
+                // 丟擲模式：靈敏度低 (數值大，要很大力才觸發)
+                senseRange.min = "500";
+                senseRange.max = "3000"; // 拉高上限
+                senseRange.value = "1200"; // 預設一個較難觸發的值
+                throwWarning.style.display = 'block';
+            }
             updateLabels();
         }
 
@@ -272,17 +315,15 @@
             const selectedImage = imageSelect.value;
             
             if (!selectedAudio || !selectedImage) {
-                alert("請先確認有選擇音效和圖片！");
+                alert("請先等待檔案讀取完成！");
                 return;
             }
 
-            // 套用設定
             audioEl.src = selectedAudio;
             audioEl.volume = document.getElementById('volRange').value;
             imageEl.src = selectedImage;
             shakeThreshold = parseInt(document.getElementById('senseRange').value);
 
-            // 解鎖音效
             audioEl.play().then(() => {
                 audioEl.pause();
                 audioEl.currentTime = 0;
@@ -302,7 +343,6 @@
             toggleFullScreen(false);
         }
 
-        // --- 全螢幕與權限 (維持原樣) ---
         function toggleFullScreen(enable) {
             const doc = window.document;
             const docEl = doc.documentElement;
@@ -333,6 +373,7 @@
 
             const curTime = new Date().getTime();
 
+            // 10ms 高頻偵測
             if ((curTime - lastUpdate) > 10) {
                 const diffTime = curTime - lastUpdate;
                 lastUpdate = curTime;
@@ -346,6 +387,7 @@
                     return;
                 }
 
+                // 計算加速度變化量 (Jerk)
                 const deltaX = Math.abs(x - lastX);
                 const deltaY = Math.abs(y - lastY);
                 const deltaZ = Math.abs(z - lastZ);
