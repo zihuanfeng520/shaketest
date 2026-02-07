@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>雙模式震動偵測 (支援多格式)</title>
+    <title>雙模式震動偵測 (完美同步版)</title>
     <style>
-        /* --- 樣式設定 --- */
+        /* --- 樣式設定 (維持不變) --- */
         body {
             margin: 0;
             padding: 0;
@@ -62,7 +62,6 @@
             color: white;
         }
 
-        /* 模式切換特別樣式 */
         #modeSelect {
             background-color: #0984e3;
             font-weight: bold;
@@ -82,15 +81,8 @@
             transition: all 0.2s;
         }
         
-        button.start-btn:active {
-            transform: scale(0.95);
-        }
-
-        button.start-btn:disabled {
-            background-color: #555;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
+        button.start-btn:active { transform: scale(0.95); }
+        button.start-btn:disabled { background-color: #555; cursor: not-allowed; box-shadow: none; }
 
         #loading-msg {
             color: #f1c40f;
@@ -100,7 +92,6 @@
             text-align: center;
         }
 
-        /* 待機層與效果 */
         #standby-layer {
             position: fixed;
             top: 0;
@@ -147,7 +138,7 @@
 <body>
 
     <div id="settings-panel">
-        <h2 style="margin-bottom: 10px;">震動偵測 (支援 wav/mp3)</h2>
+        <h2 style="margin-bottom: 10px;">震動偵測 (完美同步版)</h2>
         
         <div id="loading-msg">正在掃描 GitHub 資料夾...</div>
 
@@ -182,7 +173,6 @@
         <div class="control-group">
             <label>觸發門檻值: <span id="senseValue">150</span></label>
             <input type="range" id="senseRange" min="50" max="500" step="10" value="150" oninput="updateLabels()">
-            <small style="color:#888; display:block; margin-top:5px;">數值越小越容易觸發</small>
         </div>
 
         <button class="start-btn" id="startBtn" onclick="enterStandby()" disabled>🔴 進入待機</button>
@@ -203,7 +193,6 @@
         // ==========================================
 
         let shakeThreshold = 150; 
-        const EFFECT_DURATION = 2000;
         
         let lastUpdate = 0;
         let lastX = null, lastY = null, lastZ = null;
@@ -220,6 +209,7 @@
         const modeSelect = document.getElementById('modeSelect');
         const senseRange = document.getElementById('senseRange');
         const throwWarning = document.getElementById('throwWarning');
+        const layer = document.getElementById('standby-layer');
 
         // --- 初始化: 讀取 GitHub 檔案 ---
         window.onload = function() {
@@ -233,16 +223,15 @@
                 fetch(pictureApi).then(res => { if(!res.ok) throw new Error("找不到 picture 資料夾"); return res.json(); })
             ])
             .then(([soundData, pictureData]) => {
-                // 1. 處理音效列表 (新增支援 wav, ogg, m4a)
+                // 音效
                 audioSelect.innerHTML = '';
                 let hasAudio = false;
                 if (Array.isArray(soundData)) {
                     soundData.forEach(file => {
                         const name = file.name.toLowerCase();
-                        // 這裡加入了多種格式判斷
                         if (name.endsWith('.mp3') || name.endsWith('.wav') || name.endsWith('.ogg') || name.endsWith('.m4a')) {
                             const option = document.createElement('option');
-                            option.value = `sound/${file.name}`; // 使用原始檔名確保中文路徑正確
+                            option.value = `sound/${file.name}`; 
                             option.text = file.name;
                             audioSelect.appendChild(option);
                             hasAudio = true;
@@ -250,7 +239,7 @@
                     });
                 }
 
-                // 2. 處理圖片列表
+                // 圖片
                 imageSelect.innerHTML = '';
                 let hasImage = false;
                 if (Array.isArray(pictureData)) {
@@ -283,20 +272,23 @@
             
             changeMode(); 
             updateLabels();
+
+            // ★★★ 關鍵修改：綁定音效結束事件 ★★★
+            // 當音效播完時，才執行重置動作
+            audioEl.onended = function() {
+                resetEffect();
+            };
         }
 
         // --- 切換模式邏輯 ---
         function changeMode() {
             const mode = modeSelect.value;
-            
             if (mode === 'slap') {
-                // 拍桌
                 senseRange.min = "50";
                 senseRange.max = "500";
                 senseRange.value = "150";
                 throwWarning.style.display = 'none';
             } else {
-                // 丟擲
                 senseRange.min = "500";
                 senseRange.max = "3000";
                 senseRange.value = "1200";
@@ -342,6 +334,10 @@
         function exitStandby() {
             settingsPanel.classList.remove('hidden');
             isStandby = false;
+            // 強制停止播放
+            audioEl.pause();
+            audioEl.currentTime = 0;
+            resetEffect();
             toggleFullScreen(false);
         }
 
@@ -368,6 +364,7 @@
         }
 
         function handleMotion(event) {
+            // 如果正在播放 (isPlaying = true)，這裡會直接 return，完全不會偵測
             if (!isStandby || isPlaying) return;
 
             let acceleration = event.accelerationIncludingGravity || event.acceleration;
@@ -375,7 +372,6 @@
 
             const curTime = new Date().getTime();
 
-            // 10ms 高頻偵測
             if ((curTime - lastUpdate) > 10) {
                 const diffTime = curTime - lastUpdate;
                 lastUpdate = curTime;
@@ -406,21 +402,32 @@
 
         function triggerEffect() {
             if (isPlaying) return;
-            isPlaying = true;
+            isPlaying = true; // ★ 鎖定偵測
 
-            const layer = document.getElementById('standby-layer');
-
+            // 重置音頻並播放
             audioEl.currentTime = 0;
-            audioEl.play().catch(e => console.log(e));
+            audioEl.play()
+                .then(() => {
+                    // 播放成功，顯示圖片
+                    layer.classList.add('active');
+                })
+                .catch(e => {
+                    console.log("播放失敗", e);
+                    // 如果播放失敗，立刻重置，避免卡住
+                    resetEffect();
+                });
+
             if (navigator.vibrate) navigator.vibrate(200);
 
-            layer.classList.add('active');
+            // ★ 注意：這裡不再有 setTimeout 了！
+            // 結束的動作全部交給 audioEl.onended 處理
+        }
 
-            setTimeout(() => {
-                layer.classList.remove('active');
-                isPlaying = false;
-                lastX = null;
-            }, EFFECT_DURATION);
+        // 統一處理效果結束的函式
+        function resetEffect() {
+            layer.classList.remove('active'); // 隱藏圖片
+            isPlaying = false; // ★ 解鎖偵測
+            lastX = null; // 重置座標，防止殘餘震動誤觸
         }
     </script>
 </body>
