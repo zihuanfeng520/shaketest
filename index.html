@@ -339,14 +339,14 @@
             if (mode === 'slap') {
                 // 拍桌模式：範圍 10 ~ 500 (微調很細)
                 senseRange.min = "10";
-                senseRange.max = "500";
-                senseRange.value = "150";
+                senseRange.max = "1000";
+                senseRange.value = "500";
                 throwWarning.style.display = 'none';
             } else {
                 // 丟擲模式：範圍 500 ~ 4000 (需要很大力)
-                senseRange.min = "500";
-                senseRange.max = "4000"; // 拉高上限到 4000
-                senseRange.value = "1200";
+                senseRange.min = "1000";
+                senseRange.max = "10000"; // 拉高上限到 4000
+                senseRange.value = "6000";
                 throwWarning.style.display = 'block';
             }
             updateLabels();
@@ -480,3 +480,4 @@
     </script>
 </body>
 </html>
+
