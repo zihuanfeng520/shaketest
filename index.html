@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>雙模式震動偵測</title>
+    <title>雙模式震動偵測 (支援多格式)</title>
     <style>
         /* --- 樣式設定 --- */
         body {
@@ -136,7 +136,6 @@
             transform: scale(1);
         }
         
-        /* 丟擲模式的警告 */
         .warning-text {
             color: #ff7675;
             font-size: 12px;
@@ -148,7 +147,7 @@
 <body>
 
     <div id="settings-panel">
-        <h2 style="margin-bottom: 10px;">雙模式震動偵測</h2>
+        <h2 style="margin-bottom: 10px;">震動偵測 (支援 wav/mp3)</h2>
         
         <div id="loading-msg">正在掃描 GitHub 資料夾...</div>
 
@@ -198,7 +197,7 @@
 
     <script>
         // ==========================================
-        // ★★★ 設定區 ★★★
+        // ★★★ 設定區 (已填好) ★★★
         const GITHUB_USERNAME = 'zihuanfeng520'; 
         const REPO_NAME = 'shaketest';
         // ==========================================
@@ -234,14 +233,16 @@
                 fetch(pictureApi).then(res => { if(!res.ok) throw new Error("找不到 picture 資料夾"); return res.json(); })
             ])
             .then(([soundData, pictureData]) => {
-                // 音效
+                // 1. 處理音效列表 (新增支援 wav, ogg, m4a)
                 audioSelect.innerHTML = '';
                 let hasAudio = false;
                 if (Array.isArray(soundData)) {
                     soundData.forEach(file => {
-                        if (file.name.toLowerCase().endsWith('.mp3')) {
+                        const name = file.name.toLowerCase();
+                        // 這裡加入了多種格式判斷
+                        if (name.endsWith('.mp3') || name.endsWith('.wav') || name.endsWith('.ogg') || name.endsWith('.m4a')) {
                             const option = document.createElement('option');
-                            option.value = `sound/${file.name}`; 
+                            option.value = `sound/${file.name}`; // 使用原始檔名確保中文路徑正確
                             option.text = file.name;
                             audioSelect.appendChild(option);
                             hasAudio = true;
@@ -249,7 +250,7 @@
                     });
                 }
 
-                // 圖片
+                // 2. 處理圖片列表
                 imageSelect.innerHTML = '';
                 let hasImage = false;
                 if (Array.isArray(pictureData)) {
@@ -280,7 +281,7 @@
                 loadingMsg.innerText = "❌ 讀取失敗: " + error.message;
             });
             
-            changeMode(); // 初始化模式數值
+            changeMode(); 
             updateLabels();
         }
 
@@ -289,16 +290,16 @@
             const mode = modeSelect.value;
             
             if (mode === 'slap') {
-                // 拍桌模式：靈敏度高 (數值小)
+                // 拍桌
                 senseRange.min = "50";
                 senseRange.max = "500";
-                senseRange.value = "150"; // 預設值
+                senseRange.value = "150";
                 throwWarning.style.display = 'none';
             } else {
-                // 丟擲模式：靈敏度低 (數值大，要很大力才觸發)
+                // 丟擲
                 senseRange.min = "500";
-                senseRange.max = "3000"; // 拉高上限
-                senseRange.value = "1200"; // 預設一個較難觸發的值
+                senseRange.max = "3000";
+                senseRange.value = "1200";
                 throwWarning.style.display = 'block';
             }
             updateLabels();
@@ -324,6 +325,7 @@
             imageEl.src = selectedImage;
             shakeThreshold = parseInt(document.getElementById('senseRange').value);
 
+            // 解鎖音效
             audioEl.play().then(() => {
                 audioEl.pause();
                 audioEl.currentTime = 0;
@@ -387,7 +389,6 @@
                     return;
                 }
 
-                // 計算加速度變化量 (Jerk)
                 const deltaX = Math.abs(x - lastX);
                 const deltaY = Math.abs(y - lastY);
                 const deltaZ = Math.abs(z - lastZ);
