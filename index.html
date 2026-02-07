@@ -3,148 +3,336 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>拍桌觸發漫畫效果</title>
+    <title>自動抓檔震動偵測</title>
     <style>
-        /* 全局設定：隱藏捲軸，禁止選取 */
+        /* --- 樣式設定 (維持不變) --- */
         body {
             margin: 0;
             padding: 0;
             height: 100vh;
-            background-color: #000; /* 預設黑屏 */
+            background-color: #1a1a1a;
+            font-family: "Microsoft JhengHei", sans-serif;
             overflow: hidden;
             user-select: none;
             -webkit-touch-callout: none;
+        }
+
+        #settings-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
             align-items: center;
-            font-family: sans-serif;
+            justify-content: center;
+            z-index: 10;
+            background-color: #1a1a1a;
+            color: white;
+            transition: transform 0.3s ease;
+            overflow-y: auto; /* 避免手機螢幕太小選項被切掉 */
         }
 
-        /* 初始的啟動按鈕介面 */
-        #start-screen {
-            text-align: center;
-            color: #fff;
-            z-index: 10; /* 在最上層 */
+        #settings-panel.hidden {
+            transform: translateY(-100%);
         }
 
-        button {
-            padding: 20px 40px;
+        .control-group {
+            margin-bottom: 20px;
+            width: 80%;
+            max-width: 300px;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #ccc;
+        }
+
+        select, input[type="range"] {
+            width: 100%;
+            padding: 10px;
+            border-radius: 5px;
+            border: none;
+            font-size: 16px;
+            background: #333;
+            color: white;
+        }
+
+        button.start-btn {
+            margin-top: 20px;
+            margin-bottom: 50px;
+            padding: 15px 50px;
             font-size: 20px;
             background-color: #d63031;
             color: white;
             border: none;
             border-radius: 50px;
             cursor: pointer;
-            margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(214, 48, 49, 0.4);
+        }
+        
+        button.start-btn:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+            box-shadow: none;
         }
 
-        /* 核心效果層：覆蓋整個螢幕 */
-        #effect-overlay {
+        /* 讀取中的提示 */
+        #loading-msg {
+            color: #f1c40f;
+            font-size: 14px;
+            margin-bottom: 10px;
+            white-space: pre-wrap;
+            text-align: center;
+        }
+
+        /* 待機層 */
+        #standby-layer {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: #000; /* 預設黑色背景 */
+            background-color: black;
+            z-index: 1;
             display: flex;
             justify-content: center;
             align-items: center;
-            z-index: 5; /* 比啟動介面低，但比其他內容高 */
-            pointer-events: none; /* 讓點擊可以穿透，雖然這裡沒什麼好點的 */
-            transition: background-color 0.1s step-start; /* 瞬間切換背景色 */
         }
 
-        /* 圖片設定：預設隱藏 */
+        #hint-text {
+            position: absolute;
+            bottom: 20px;
+            color: #555;
+            font-size: 12px;
+            pointer-events: none;
+        }
+
         #effect-image {
-            max-width: 90%;
-            max-height: 90%;
+            max-width: 95%;
+            max-height: 95%;
             object-fit: contain;
-            opacity: 0; /* 預設透明 */
-            transform: scale(0.8); /* 預設稍微縮小 */
-            transition: opacity 0.1s step-start, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* 彈跳效果 */
+            opacity: 0;
+            transform: scale(0.5);
+            transition: opacity 0.1s, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
-        /* 觸發時的狀態 class */
-        #effect-overlay.active {
-            background-color: #fff !important; /* 背景瞬間變白 */
+        #standby-layer.active #effect-image {
+            opacity: 1;
+            transform: scale(1);
         }
-
-        #effect-overlay.active #effect-image {
-            opacity: 1; /* 圖片顯現 */
-            transform: scale(1); /* 彈跳到正常大小 */
-        }
-
     </style>
 </head>
 <body>
 
-    <div id="start-screen">
-        <h1>拍桌漫畫效果</h1>
-        <p>請將手機靜置桌上，點擊開始</p>
-        <button onclick="init()">🔴 啟動並進入黑屏</button>
+    <div id="settings-panel">
+        <h2 style="margin-bottom: 10px;">自動抓檔震動偵測</h2>
+        
+        <div id="loading-msg">正在掃描 GitHub 檔案...</div>
+
+        <div class="control-group">
+            <label>選擇台詞 (MP3):</label>
+            <select id="audioSelect">
+                <option value="" disabled selected>讀取中...</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>選擇圖片 (PNG/JPG):</label>
+            <select id="imageSelect">
+                <option value="" disabled selected>讀取中...</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>音量: <span id="volValue">100%</span></label>
+            <input type="range" id="volRange" min="0" max="1" step="0.1" value="1" oninput="updateLabels()">
+        </div>
+
+        <div class="control-group">
+            <label>靈敏度 (小=敏): <span id="senseValue">150</span></label>
+            <input type="range" id="senseRange" min="50" max="500" step="10" value="150" oninput="updateLabels()">
+        </div>
+
+        <button class="start-btn" id="startBtn" onclick="enterStandby()" disabled>🔴 進入待機</button>
     </div>
 
-    <div id="effect-overlay">
-        <img id="effect-image" src="igiari.png" alt="要吵架嗎！">
+    <div id="standby-layer" ondblclick="exitStandby()">
+        <img id="effect-image" src="" alt="Effect">
+        <div id="hint-text">雙擊螢幕回到設定</div>
     </div>
 
-    <audio id="myAudio" src="shake.mp3" preload="auto"></audio>
+    <audio id="mainAudio" preload="auto"></audio>
 
     <script>
-        // --- 設定區 ---
-        const SHAKE_THRESHOLD = 150;  // 觸發靈敏度 (越小越敏感)
-        const EFFECT_DURATION = 1500; // 效果持續時間 (毫秒)，約 1.5 秒
-        // -------------
+        // ==========================================
+        // ★★★ 這裡已經幫你設定好了 ★★★
+        const GITHUB_USERNAME = 'zihuanfeng520'; 
+        const REPO_NAME = 'shaketest';
+        // ==========================================
 
+        let shakeThreshold = 150; 
+        const EFFECT_DURATION = 2000;
+        
         let lastUpdate = 0;
         let lastX = null, lastY = null, lastZ = null;
-        let isPlaying = false; // 鎖定開關
+        let isPlaying = false; 
+        let isStandby = false;
 
-        const startScreen = document.getElementById('start-screen');
-        const overlay = document.getElementById('effect-overlay');
-        const audio = document.getElementById('myAudio');
+        const settingsPanel = document.getElementById('settings-panel');
+        const audioEl = document.getElementById('mainAudio');
+        const imageEl = document.getElementById('effect-image');
+        const audioSelect = document.getElementById('audioSelect');
+        const imageSelect = document.getElementById('imageSelect');
+        const loadingMsg = document.getElementById('loading-msg');
+        const startBtn = document.getElementById('startBtn');
 
-        function init() {
-            // 1. 解鎖音效播放
-            audio.play().then(() => {
-                audio.pause();
-                audio.currentTime = 0;
-            }).catch(e => alert("找不到音效檔 (shake.mp3)"));
+        // --- 自動讀取 GitHub 檔案 ---
+        window.onload = function() {
+            // 建構 GitHub API 網址
+            const apiUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/`;
 
-            // 2. 請求傳感器權限
-            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-                DeviceMotionEvent.requestPermission()
-                    .then(response => {
-                        if (response === 'granted') enterStandbyMode();
-                        else alert("需要權限才能運作");
-                    })
-                    .catch(console.error);
+            fetch(apiUrl)
+                .then(response => {
+                    if (!response.ok) throw new Error(`找不到倉庫 (代碼 ${response.status})`);
+                    return response.json();
+                })
+                .then(data => {
+                    // 清空選單
+                    audioSelect.innerHTML = '';
+                    imageSelect.innerHTML = '';
+
+                    let hasAudio = false;
+                    let hasImage = false;
+
+                    // 遍歷所有檔案
+                    if (Array.isArray(data)) {
+                        data.forEach(file => {
+                            const name = file.name.toLowerCase();
+                            
+                            // 判斷是否為 MP3
+                            if (name.endsWith('.mp3')) {
+                                const option = document.createElement('option');
+                                option.value = file.name;
+                                option.text = file.name;
+                                audioSelect.appendChild(option);
+                                hasAudio = true;
+                            }
+
+                            // 判斷是否為圖片
+                            if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.gif')) {
+                                const option = document.createElement('option');
+                                option.value = file.name;
+                                option.text = file.name;
+                                imageSelect.appendChild(option);
+                                hasImage = true;
+                            }
+                        });
+                    }
+
+                    // 檢查是否有檔案
+                    if (!hasAudio) audioSelect.innerHTML = '<option disabled>無 MP3 檔案</option>';
+                    if (!hasImage) imageSelect.innerHTML = '<option disabled>無圖片檔案</option>';
+
+                    if (hasAudio && hasImage) {
+                        loadingMsg.innerText = "✅ 掃描完成！請選擇設定";
+                        loadingMsg.style.color = "#2ecc71";
+                        startBtn.disabled = false;
+                        
+                        // 預設選取第一個選項
+                        audioSelect.selectedIndex = 0;
+                        imageSelect.selectedIndex = 0;
+                    } else {
+                        loadingMsg.innerText = "⚠️ 找不到 .mp3 或圖片檔案\n請確認檔案已上傳且檔名為小寫";
+                    }
+                })
+                .catch(error => {
+                    console.error(error);
+                    loadingMsg.innerText = "❌ 讀取失敗: " + error.message;
+                    if(location.protocol === 'file:') {
+                        loadingMsg.innerText += "\n(請上傳到 GitHub 後再測試)";
+                    }
+                });
+            
+            updateLabels();
+        }
+
+        function updateLabels() {
+            document.getElementById('volValue').innerText = Math.round(document.getElementById('volRange').value * 100) + "%";
+            document.getElementById('senseValue').innerText = document.getElementById('senseRange').value;
+        }
+
+        // --- 進入待機 ---
+        function enterStandby() {
+            const selectedAudio = audioSelect.value;
+            const selectedImage = imageSelect.value;
+            
+            if (!selectedAudio || !selectedImage) {
+                alert("請先確認有選擇音效和圖片！");
+                return;
+            }
+
+            // 套用設定
+            audioEl.src = selectedAudio;
+            audioEl.volume = document.getElementById('volRange').value;
+            imageEl.src = selectedImage;
+            shakeThreshold = parseInt(document.getElementById('senseRange').value);
+
+            // 解鎖音效
+            audioEl.play().then(() => {
+                audioEl.pause();
+                audioEl.currentTime = 0;
+            }).catch(e => console.log("音效解鎖失敗", e));
+
+            toggleFullScreen(true);
+            requestSensorPermission();
+
+            settingsPanel.classList.add('hidden');
+            isStandby = true;
+            lastX = null; lastY = null; lastZ = null;
+        }
+
+        function exitStandby() {
+            settingsPanel.classList.remove('hidden');
+            isStandby = false;
+            toggleFullScreen(false);
+        }
+
+        // --- 全螢幕與權限 (維持原樣) ---
+        function toggleFullScreen(enable) {
+            const doc = window.document;
+            const docEl = doc.documentElement;
+            if (enable) {
+                const req = docEl.requestFullscreen || docEl.webkitRequestFullScreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+                if (req) req.call(docEl);
             } else {
-                enterStandbyMode();
+                const exit = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+                if (exit) exit.call(doc);
             }
         }
 
-        // 進入待機模式：隱藏按鈕，開始監聽
-        function enterStandbyMode() {
-            startScreen.style.display = 'none'; // 隱藏啟動介面，變為全黑
-            startListening();
-        }
-
-        function startListening() {
-            window.addEventListener('devicemotion', handleMotion, false);
+        function requestSensorPermission() {
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission().then(res => {
+                    if (res === 'granted') window.addEventListener('devicemotion', handleMotion, false);
+                }).catch(console.error);
+            } else {
+                window.addEventListener('devicemotion', handleMotion, false);
+            }
         }
 
         function handleMotion(event) {
-            // 如果正在播放效果，停止偵測
-            if (isPlaying) return;
+            if (!isStandby || isPlaying) return;
 
-            let acceleration = event.accelerationIncludingGravity;
-            if (!acceleration) acceleration = event.acceleration;
+            let acceleration = event.accelerationIncludingGravity || event.acceleration;
             if (!acceleration) return;
 
             const curTime = new Date().getTime();
 
-            // 10ms 高頻偵測
             if ((curTime - lastUpdate) > 10) {
                 const diffTime = curTime - lastUpdate;
                 lastUpdate = curTime;
@@ -158,13 +346,12 @@
                     return;
                 }
 
-                // 絕對值差計算公式
                 const deltaX = Math.abs(x - lastX);
                 const deltaY = Math.abs(y - lastY);
                 const deltaZ = Math.abs(z - lastZ);
                 const speed = (deltaX + deltaY + deltaZ) / diffTime * 10000;
 
-                if (speed > SHAKE_THRESHOLD) {
+                if (speed > shakeThreshold) {
                     triggerEffect();
                 }
 
@@ -176,24 +363,20 @@
 
         function triggerEffect() {
             if (isPlaying) return;
-            isPlaying = true; // 鎖定
+            isPlaying = true;
 
-            // 1. 播放音效
-            audio.currentTime = 0;
-            audio.play().catch(e => console.log("播放失敗", e));
-            if (navigator.vibrate) navigator.vibrate(300);
+            const layer = document.getElementById('standby-layer');
 
-            // 2. 顯示視覺效果 (加 class)
-            overlay.classList.add('active');
+            audioEl.currentTime = 0;
+            audioEl.play().catch(e => console.log(e));
+            if (navigator.vibrate) navigator.vibrate(200);
 
-            // 3. 設定定時器，在指定時間後恢復黑屏
+            layer.classList.add('active');
+
             setTimeout(() => {
-                // 移除效果 class，恢復黑屏
-                overlay.classList.remove('active');
-                
-                // 解鎖偵測，並重置座標以防誤觸
+                layer.classList.remove('active');
                 isPlaying = false;
-                lastX = null; lastY = null; lastZ = null;
+                lastX = null;
             }, EFFECT_DURATION);
         }
     </script>
