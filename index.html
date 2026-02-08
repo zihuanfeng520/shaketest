@@ -384,10 +384,17 @@
             updateLabels();
         }
 
-        // ✅ 新增：裝置模式偵測與切換
+        // 新增：裝置模式偵測與切換
         function detectDefaultDeviceMode() {
-            const hasMotion = 'DeviceMotionEvent' in window;
-            return hasMotion ? 'mobile' : 'desktop';
+            const ua = navigator.userAgent || navigator.vendor || window.opera;
+            // 明確判斷行動裝置
+            const isMobileUA = /android|iphone|ipad|ipod/i.test(ua);
+
+            if (isMobileUA) return 'mobile';
+
+            // 其他一律當桌機（Windows / macOS / Linux）
+            return 'desktop';
+
         }
 
         function getEffectiveDeviceMode() {
