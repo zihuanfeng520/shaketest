@@ -205,7 +205,6 @@
         <div class="control-group">
             <label>裝置模式:</label>
             <select id="deviceModeSelect" onchange="changeDeviceMode()">
-                <option value="auto" selected>🤖 自動偵測</option>
                 <option value="mobile">📱 手機模式（搖晃/拍桌）</option>
                 <option value="desktop">💻 電腦模式（點擊/鍵盤觸發）</option>
             </select>
@@ -276,7 +275,7 @@
         let isStandby = false;
 
         // ✅ 新增：裝置模式
-        let deviceMode = 'auto'; // auto | mobile | desktop
+        let deviceMode = 'mobile'; // mobile | desktop
 
         // ✅ 防止雙擊/連點造成多次觸發
         let lastTriggerAt = 0;
@@ -404,7 +403,7 @@
 
         function changeDeviceMode() {
             deviceMode = deviceModeSelect.value;
-            const effective = getEffectiveDeviceMode();
+            const effective = deviceMode;
 
             if (effective === 'desktop') {
                 triggerModeGroup.style.display = 'none';
@@ -445,7 +444,7 @@
 
             toggleFullScreen(true);
 
-            const effective = getEffectiveDeviceMode();
+            const effective = deviceMode;
             if (effective === 'mobile') {
                 requestSensorPermission();
                 unbindDesktopControls();
@@ -474,7 +473,7 @@
 
         // ✅ 讓手機維持雙擊回設定，但電腦模式避免雙擊（因為會包含兩次 click）
         function handleStandbyDoubleClick() {
-            const effective = getEffectiveDeviceMode();
+            const effective = deviceMode;
             if (effective === 'mobile') {
                 exitStandby();
             }
