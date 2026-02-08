@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>聲音觸發器</title>
     <style>
-        /* --- 樣式設定 --- */
         body {
             margin: 0;
             padding: 0;
@@ -41,7 +41,7 @@
         .control-group {
             margin-bottom: 20px;
             width: 80%;
-            max-width: 320px; /* 稍微加寬 */
+            max-width: 320px;
             text-align: left;
         }
 
@@ -63,10 +63,9 @@
             outline: none;
         }
 
-        /* --- 優化滑桿樣式 (解決右邊白白的問題) --- */
         input[type="range"] {
-            -webkit-appearance: none; /* 清除預設樣式 */
-            width: 100%; /* 確保填滿 */
+            -webkit-appearance: none;
+            width: 100%;
             height: 8px;
             background: #444;
             border-radius: 5px;
@@ -75,23 +74,21 @@
             cursor: pointer;
         }
 
-        /* 滑桿拖曳球 (Chrome/Safari) */
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
             appearance: none;
             width: 24px;
             height: 24px;
             border-radius: 50%;
-            background: #0984e3; /* 藍色球 */
+            background: #0984e3;
             cursor: pointer;
             border: 2px solid #fff;
-            box-shadow: 0 0 5px rgba(0,0,0,0.3);
-            margin-top: -8px; /* 校正位置 */
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+            margin-top: -8px;
             position: relative;
             z-index: 2;
         }
-        
-        /* 滑桿軌道 (Chrome/Safari) - 雖然 accent-color 比較新，但這樣寫相容性最好 */
+
         input[type="range"]::-webkit-slider-runnable-track {
             width: 100%;
             height: 8px;
@@ -100,7 +97,6 @@
             border-radius: 5px;
         }
 
-        /* Firefox 支援 */
         input[type="range"]::-moz-range-thumb {
             width: 24px;
             height: 24px;
@@ -130,9 +126,16 @@
             transition: transform 0.1s, background-color 0.2s;
             font-weight: bold;
         }
-        
-        button.start-btn:active { transform: scale(0.95); }
-        button.start-btn:disabled { background-color: #555; cursor: not-allowed; box-shadow: none; }
+
+        button.start-btn:active {
+            transform: scale(0.95);
+        }
+
+        button.start-btn:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
 
         #loading-msg {
             color: #f1c40f;
@@ -163,6 +166,8 @@
             pointer-events: none;
             font-weight: bold;
             letter-spacing: 1px;
+            text-align: center;
+            padding: 0 16px;
         }
 
         #effect-image {
@@ -178,7 +183,7 @@
             opacity: 1;
             transform: scale(1);
         }
-        
+
         .warning-text {
             color: #ff7675;
             font-size: 13px;
@@ -188,14 +193,29 @@
         }
     </style>
 </head>
+
 <body>
 
     <div id="settings-panel">
         <h2 style="margin-bottom: 10px;">聲音觸發器</h2>
-        
+
         <div id="loading-msg">正在掃描 GitHub 資料夾...</div>
 
+        <!-- ✅ 新增：裝置模式 -->
         <div class="control-group">
+            <label>裝置模式:</label>
+            <select id="deviceModeSelect" onchange="changeDeviceMode()">
+                <option value="auto" selected>🤖 自動偵測</option>
+                <option value="mobile">📱 手機模式（搖晃/拍桌）</option>
+                <option value="desktop">💻 電腦模式（點擊/鍵盤觸發）</option>
+            </select>
+            <small style="color:#888; display:block; margin-top:5px; font-size:12px;">
+                （電腦模式下不需要感測器，點一下畫面或按空白鍵即可觸發）
+            </small>
+        </div>
+
+        <!-- 原本：觸發模式（只在手機模式有意義） -->
+        <div class="control-group" id="triggerModeGroup">
             <label>選擇觸發模式:</label>
             <select id="modeSelect" onchange="changeMode()">
                 <option value="slap">✋ 拍桌模式</option>
@@ -223,7 +243,8 @@
             <input type="range" id="volRange" min="0" max="1" step="0.01" value="1" oninput="updateLabels()">
         </div>
 
-        <div class="control-group">
+        <!-- 原本：敏感度（只在手機模式有意義） -->
+        <div class="control-group" id="sensitivityGroup">
             <label>觸發門檻值: <span id="senseValue">150</span></label>
             <input type="range" id="senseRange" min="10" max="4000" step="10" value="150" oninput="updateLabels()">
             <small style="color:#888; display:block; margin-top:5px; font-size:12px;">(數值越小越敏感，越大越難觸發)</small>
@@ -232,9 +253,10 @@
         <button class="start-btn" id="startBtn" onclick="enterStandby()" disabled>開始</button>
     </div>
 
-    <div id="standby-layer" ondblclick="exitStandby()">
+    <!-- ✅ 手機模式維持雙擊回設定；電腦模式我改成按 Esc 回設定（避免雙擊=兩次點擊觸發） -->
+    <div id="standby-layer" ondblclick="handleStandbyDoubleClick()">
         <img id="effect-image" src="" alt="Effect">
-        <div id="hint-text">雙擊螢幕回到設定</div>
+        <div id="hint-text">提示</div>
     </div>
 
     <audio id="mainAudio" preload="auto"></audio>
@@ -242,16 +264,22 @@
     <script>
         // ==========================================
         // ★★★ 設定區 (已填好) ★★★
-        const GITHUB_USERNAME = 'zihuanfeng520'; 
+        const GITHUB_USERNAME = 'zihuanfeng520';
         const REPO_NAME = 'shaketest';
         // ==========================================
 
-        let shakeThreshold = 150; 
-        
+        let shakeThreshold = 150;
+
         let lastUpdate = 0;
         let lastX = null, lastY = null, lastZ = null;
-        let isPlaying = false; 
+        let isPlaying = false;
         let isStandby = false;
+
+        // ✅ 新增：裝置模式
+        let deviceMode = 'auto'; // auto | mobile | desktop
+
+        // ✅ 防止雙擊/連點造成多次觸發
+        let lastTriggerAt = 0;
 
         const settingsPanel = document.getElementById('settings-panel');
         const audioEl = document.getElementById('mainAudio');
@@ -265,95 +293,124 @@
         const throwWarning = document.getElementById('throwWarning');
         const layer = document.getElementById('standby-layer');
 
+        // ✅ 新增：UI 相關元素
+        const deviceModeSelect = document.getElementById('deviceModeSelect');
+        const triggerModeGroup = document.getElementById('triggerModeGroup');
+        const sensitivityGroup = document.getElementById('sensitivityGroup');
+        const hintText = document.getElementById('hint-text');
+
         // --- 初始化: 讀取 GitHub 檔案 ---
-        window.onload = function() {
+        window.onload = function () {
             const soundApi = `https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/sound`;
             const pictureApi = `https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/picture`;
 
             loadingMsg.innerText = "正在連線 GitHub API...";
 
             Promise.all([
-                fetch(soundApi).then(res => { if(!res.ok) throw new Error("找不到 sound 資料夾"); return res.json(); }),
-                fetch(pictureApi).then(res => { if(!res.ok) throw new Error("找不到 picture 資料夾"); return res.json(); })
+                fetch(soundApi).then(res => { if (!res.ok) throw new Error("找不到 sound 資料夾"); return res.json(); }),
+                fetch(pictureApi).then(res => { if (!res.ok) throw new Error("找不到 picture 資料夾"); return res.json(); })
             ])
-            .then(([soundData, pictureData]) => {
-                // 音效
-                audioSelect.innerHTML = '';
-                let hasAudio = false;
-                if (Array.isArray(soundData)) {
-                    soundData.forEach(file => {
-                        const name = file.name.toLowerCase();
-                        if (name.endsWith('.mp3') || name.endsWith('.wav') || name.endsWith('.ogg') || name.endsWith('.m4a')) {
-                            const option = document.createElement('option');
-                            option.value = `sound/${file.name}`; 
-                            option.text = file.name;
-                            audioSelect.appendChild(option);
-                            hasAudio = true;
-                        }
-                    });
-                }
+                .then(([soundData, pictureData]) => {
+                    // 音效
+                    audioSelect.innerHTML = '';
+                    let hasAudio = false;
+                    if (Array.isArray(soundData)) {
+                        soundData.forEach(file => {
+                            const name = file.name.toLowerCase();
+                            if (name.endsWith('.mp3') || name.endsWith('.wav') || name.endsWith('.ogg') || name.endsWith('.m4a')) {
+                                const option = document.createElement('option');
+                                option.value = `sound/${file.name}`;
+                                option.text = file.name;
+                                audioSelect.appendChild(option);
+                                hasAudio = true;
+                            }
+                        });
+                    }
 
-                // 圖片
-                imageSelect.innerHTML = '';
-                let hasImage = false;
-                if (Array.isArray(pictureData)) {
-                    pictureData.forEach(file => {
-                        const name = file.name.toLowerCase();
-                        if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.gif')) {
-                            const option = document.createElement('option');
-                            option.value = `picture/${file.name}`; 
-                            option.text = file.name;
-                            imageSelect.appendChild(option);
-                            hasImage = true;
-                        }
-                    });
-                }
+                    // 圖片
+                    imageSelect.innerHTML = '';
+                    let hasImage = false;
+                    if (Array.isArray(pictureData)) {
+                        pictureData.forEach(file => {
+                            const name = file.name.toLowerCase();
+                            if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.gif')) {
+                                const option = document.createElement('option');
+                                option.value = `picture/${file.name}`;
+                                option.text = file.name;
+                                imageSelect.appendChild(option);
+                                hasImage = true;
+                            }
+                        });
+                    }
 
-                if (hasAudio && hasImage) {
-                    loadingMsg.innerText = "✅ 讀取成功！";
-                    loadingMsg.style.color = "#2ecc71";
-                    startBtn.disabled = false;
-                    audioSelect.selectedIndex = 0;
-                    imageSelect.selectedIndex = 0;
-                } else {
-                    loadingMsg.innerText = "⚠️ 讀取不完整，請檢查 sound/picture 資料夾";
-                }
-            })
-            .catch(error => {
-                console.error(error);
-                loadingMsg.innerText = "❌ 讀取失敗: " + error.message;
-            });
-            
-            changeMode(); 
+                    if (hasAudio && hasImage) {
+                        loadingMsg.innerText = "✅ 讀取成功！";
+                        loadingMsg.style.color = "#2ecc71";
+                        startBtn.disabled = false;
+                        audioSelect.selectedIndex = 0;
+                        imageSelect.selectedIndex = 0;
+                    } else {
+                        loadingMsg.innerText = "⚠️ 讀取不完整，請檢查 sound/picture 資料夾";
+                    }
+                })
+                .catch(error => {
+                    console.error(error);
+                    loadingMsg.innerText = "❌ 讀取失敗: " + error.message;
+                });
+
+            changeMode();
+            changeDeviceMode();
             updateLabels();
 
-            // 音效播完 -> 重置
-            audioEl.onended = function() {
+            audioEl.onended = function () {
                 resetEffect();
             };
         }
 
-        // --- 切換模式邏輯 ---
+        // --- 觸發模式（拍桌/丟擲） ---
         function changeMode() {
             const mode = modeSelect.value;
             if (mode === 'slap') {
-                // 拍桌模式：範圍 10 ~ 500 (微調很細)
                 senseRange.min = "10";
                 senseRange.max = "1000";
                 senseRange.value = "500";
                 throwWarning.style.display = 'none';
             } else {
-                // 丟擲模式：範圍 500 ~ 4000 (需要很大力)
                 senseRange.min = "1000";
-                senseRange.max = "10000"; // 拉高上限到 4000
+                senseRange.max = "10000";
                 senseRange.value = "6000";
                 throwWarning.style.display = 'block';
             }
             updateLabels();
         }
 
+        // ✅ 新增：裝置模式偵測與切換
+        function detectDefaultDeviceMode() {
+            const hasMotion = 'DeviceMotionEvent' in window;
+            return hasMotion ? 'mobile' : 'desktop';
+        }
+
+        function getEffectiveDeviceMode() {
+            if (deviceMode === 'auto') return detectDefaultDeviceMode();
+            return deviceMode;
+        }
+
+        function changeDeviceMode() {
+            deviceMode = deviceModeSelect.value;
+            const effective = getEffectiveDeviceMode();
+
+            if (effective === 'desktop') {
+                triggerModeGroup.style.display = 'none';
+                sensitivityGroup.style.display = 'none';
+                throwWarning.style.display = 'none';
+            } else {
+                triggerModeGroup.style.display = '';
+                sensitivityGroup.style.display = '';
+                changeMode();
+            }
+        }
+
         function updateLabels() {
-            // 音量顯示改成整數 (捨去小數點)
             document.getElementById('volValue').innerText = Math.round(document.getElementById('volRange').value * 100) + "%";
             document.getElementById('senseValue').innerText = document.getElementById('senseRange').value;
         }
@@ -362,7 +419,7 @@
         function enterStandby() {
             const selectedAudio = audioSelect.value;
             const selectedImage = imageSelect.value;
-            
+
             if (!selectedAudio || !selectedImage) {
                 alert("請先等待檔案讀取完成！");
                 return;
@@ -373,18 +430,29 @@
             imageEl.src = selectedImage;
             shakeThreshold = parseInt(document.getElementById('senseRange').value);
 
-            // 解鎖音效
+            // 解鎖音效（行動裝置常需要 user gesture 才能播放）
             audioEl.play().then(() => {
                 audioEl.pause();
                 audioEl.currentTime = 0;
             }).catch(e => console.log("音效讀取失敗", e));
 
             toggleFullScreen(true);
-            requestSensorPermission();
+
+            const effective = getEffectiveDeviceMode();
+            if (effective === 'mobile') {
+                requestSensorPermission();
+                unbindDesktopControls();
+                hintText.innerText = "雙擊螢幕回到設定";
+            } else {
+                // desktop
+                bindDesktopControls();
+                hintText.innerText = "點擊螢幕或按空白鍵觸發｜按 Esc 回到設定";
+            }
 
             settingsPanel.classList.add('hidden');
             isStandby = true;
             lastX = null; lastY = null; lastZ = null;
+            lastTriggerAt = 0;
         }
 
         function exitStandby() {
@@ -394,6 +462,15 @@
             audioEl.currentTime = 0;
             resetEffect();
             toggleFullScreen(false);
+            unbindDesktopControls();
+        }
+
+        // ✅ 讓手機維持雙擊回設定，但電腦模式避免雙擊（因為會包含兩次 click）
+        function handleStandbyDoubleClick() {
+            const effective = getEffectiveDeviceMode();
+            if (effective === 'mobile') {
+                exitStandby();
+            }
         }
 
         function toggleFullScreen(enable) {
@@ -454,11 +531,45 @@
             }
         }
 
-        function triggerEffect() {
-            if (isPlaying) return;
-            isPlaying = true; // 鎖定
+        // ✅ 電腦模式：點擊/鍵盤觸發
+        function onDesktopTrigger() {
+            if (!isStandby) return;
+            triggerEffect();
+        }
 
-            // 重置音頻並播放
+        function onKeyTrigger(e) {
+            if (!isStandby) return;
+
+            if (e.code === 'Escape') {
+                e.preventDefault();
+                exitStandby();
+                return;
+            }
+
+            if (e.code === 'Space' || e.code === 'Enter') {
+                e.preventDefault();
+                triggerEffect();
+            }
+        }
+
+        function bindDesktopControls() {
+            layer.addEventListener('click', onDesktopTrigger);
+            window.addEventListener('keydown', onKeyTrigger);
+        }
+
+        function unbindDesktopControls() {
+            layer.removeEventListener('click', onDesktopTrigger);
+            window.removeEventListener('keydown', onKeyTrigger);
+        }
+
+        function triggerEffect() {
+            const now = Date.now();
+            if (now - lastTriggerAt < 350) return;
+            lastTriggerAt = now;
+
+            if (isPlaying) return;
+            isPlaying = true;
+
             audioEl.currentTime = 0;
             audioEl.play()
                 .then(() => {
@@ -479,5 +590,5 @@
         }
     </script>
 </body>
-</html>
 
+</html>
